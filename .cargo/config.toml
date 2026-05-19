@@ -1,0 +1,5 @@
+[alias]
+cov = ["llvm-cov", "--summary-only"]
+cov-html = ["llvm-cov", "--html", "--open"]
+cov-lcov = ["llvm-cov", "--lcov", "--output-path", "lcov.info"]
+cov-ci = ["llvm-cov", "--summary-only", "--ignore-filename-regex", "(config.interactive|prompt\\.rs|navigate\\.rs|config_cmd\\.rs)"]
