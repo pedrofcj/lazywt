@@ -160,7 +160,11 @@ fn e2e_full_workflow() {
     // === Phase 1: Clone from GitHub ===
     println!("=== Phase 1: Clone from GitHub ===");
 
-    let out = git(&base, &["clone", "https://github.com/pedrofcj/lazywt.git", "lazywt-clone"]);
+    // Clone from the local project repo instead of a network URL so the e2e test
+    // is deterministic and needs no network access or git credentials (CI runs
+    // with no creds; a private/unreachable remote made `git clone` prompt for a
+    // username and fail). Mirrors the local-remote pattern used in Phase 12.
+    let out = git(&base, &["clone", project_root().to_str().unwrap(), "lazywt-clone"]);
     assert_success(&out, "git clone");
 
     let clone_dir = base.join("lazywt-clone");
