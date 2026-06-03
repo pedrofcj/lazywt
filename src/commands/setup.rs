@@ -32,7 +32,7 @@ pub fn ensure_gitignore_entry(repo_root: &Path) -> Result<()> {
 /// Convert a regular (non-bare) repository to a bare repository with worktree structure (D-97).
 ///
 /// Uses rename-to-backup strategy instead of delete-then-move.
-/// Both reviewers (Codex HIGH, Claude HIGH) flagged the original delete approach
+/// Both reviewers flagged the original delete approach
 /// as having irreversible data loss risk if bare clone fails or is incomplete.
 ///
 /// Strategy:
