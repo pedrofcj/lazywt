@@ -157,10 +157,45 @@ fn e2e_full_workflow() {
     let base = workflow_dir();
     ensure_clean_workspace(&base);
 
-    // === Phase 1: Clone from GitHub ===
-    println!("=== Phase 1: Clone from GitHub ===");
+    // === Phase 1: Clone from a local remote ===
+    println!("=== Phase 1: Clone from a local remote ===");
 
-    let out = git(&base, &["clone", "https://github.com/pedrofcj/lazywt.git", "lazywt-clone"]);
+    // Create a local bare repo to act as the "origin" remote. This keeps the E2E
+    // test fully offline -- CI runners cannot clone github.com without credentials,
+    // and a network dependency makes the test flaky regardless.
+    let origin_remote = base.join("origin.git");
+    let out = git(&base, &["init", "--bare", origin_remote.to_str().unwrap()]);
+    assert_success(&out, "git init --bare origin remote");
+
+    // Seed the remote with an initial commit on `main` via a temporary worktree.
+    let seed_wt = base.join("origin-seed");
+    let out = git(
+        &origin_remote,
+        &["worktree", "add", seed_wt.to_str().unwrap(), "-b", "main"],
+    );
+    assert_success(&out, "git worktree add origin-seed");
+
+    git(&seed_wt, &["config", "user.email", "e2e-test@lazywt.dev"]);
+    git(&seed_wt, &["config", "user.name", "E2E Test"]);
+    std::fs::write(seed_wt.join("README.md"), "# lazywt e2e seed\n")
+        .expect("failed to write seed README.md");
+    let out = git(&seed_wt, &["add", "README.md"]);
+    assert_success(&out, "git add seed README.md");
+    let out = git(&seed_wt, &["commit", "-m", "initial commit"]);
+    assert_success(&out, "git commit in origin-seed");
+
+    // Point the remote's HEAD at main and drop the temporary worktree.
+    let out = git(&origin_remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
+    assert_success(&out, "git symbolic-ref HEAD on origin");
+    std::env::set_current_dir(&base).ok();
+    let out = git(
+        &origin_remote,
+        &["worktree", "remove", seed_wt.to_str().unwrap(), "--force"],
+    );
+    assert_success(&out, "git worktree remove origin-seed");
+
+    // Clone from the local remote (offline, no credentials needed).
+    let out = git(&base, &["clone", origin_remote.to_str().unwrap(), "lazywt-clone"]);
     assert_success(&out, "git clone");
 
     let clone_dir = base.join("lazywt-clone");
