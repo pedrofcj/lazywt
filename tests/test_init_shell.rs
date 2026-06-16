@@ -145,8 +145,8 @@ fn init_add_powershell_appends_eval_line() {
 
     let content = std::fs::read_to_string(&profile).unwrap();
     assert!(
-        content.contains("wt init powershell"),
-        "PowerShell profile should contain eval line, got: {}",
+        content.contains("lazywt init powershell"),
+        "PowerShell profile should contain eval line invoking the binary, got: {}",
         content
     );
 }
@@ -158,7 +158,7 @@ fn init_add_powershell_detects_duplicate() {
     // Pre-populate with an eval line matching the expected pattern
     std::fs::write(
         &profile,
-        "Invoke-Expression (& wt init powershell | Out-String)\n",
+        "Invoke-Expression (& lazywt init powershell | Out-String)\n",
     )
     .unwrap();
     let original = std::fs::read_to_string(&profile).unwrap();
@@ -197,8 +197,8 @@ fn init_add_creates_profile_when_missing() {
     );
     let content = std::fs::read_to_string(&profile).unwrap();
     assert!(
-        content.contains("wt init powershell"),
-        "Newly created profile should contain eval line, got: {}",
+        content.contains("lazywt init powershell"),
+        "Newly created profile should contain eval line invoking the binary, got: {}",
         content
     );
 }
@@ -219,8 +219,8 @@ fn init_add_nushell_appends_eval_line() {
 
     let content = std::fs::read_to_string(&config_nu).unwrap();
     assert!(
-        content.contains("wt init nushell"),
-        "Nushell config should contain eval line, got: {}",
+        content.contains("lazywt init nushell"),
+        "Nushell config should contain eval line invoking the binary, got: {}",
         content
     );
 }

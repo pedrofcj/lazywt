@@ -27,43 +27,44 @@ pub fn run(shell_name: Option<&str>, add: bool, config: &Config) -> Result<()> {
 
 /// Generate the eval line that sources the shell function for a given shell.
 ///
-/// Uses config.command_name (e.g., "wt" or "lazywt") -- NOT hardcoded "lazywt".
-fn eval_line_for_shell(shell: &alias::Shell, command_name: &str) -> String {
+/// Always invokes the `lazywt` binary -- the executable installed on PATH --
+/// NOT config.command_name. The bootstrap line runs at profile-load time,
+/// before the alias function exists, so it must call the real binary. The
+/// function that line emits is *named* after command_name (see
+/// `alias::shell_function`), but the binary name is fixed (matching the
+/// hardcoded `& lazywt`/`command lazywt` in the function bodies).
+fn eval_line_for_shell(shell: &alias::Shell) -> String {
     match shell {
-        alias::Shell::Bash => {
-            format!(r#"eval "$({command_name} init bash)""#)
-        }
-        alias::Shell::Zsh => {
-            format!(r#"eval "$({command_name} init zsh)""#)
-        }
+        alias::Shell::Bash => r#"eval "$(lazywt init bash)""#.to_string(),
+        alias::Shell::Zsh => r#"eval "$(lazywt init zsh)""#.to_string(),
         alias::Shell::PowerShell => {
-            format!("Invoke-Expression (& {command_name} init powershell | Out-String)")
+            "Invoke-Expression (& lazywt init powershell | Out-String)".to_string()
         }
         alias::Shell::Nushell => {
             // Nushell uses `source` with a generated file or inline eval
-            format!(r#"{command_name} init nushell | save -f ~/.lazywt-init.nu; source ~/.lazywt-init.nu"#)
+            r#"lazywt init nushell | save -f ~/.lazywt-init.nu; source ~/.lazywt-init.nu"#.to_string()
         }
     }
 }
 
-/// Generate the pattern used to detect an existing eval line in a profile.
+/// Pattern used to detect an existing eval line in a profile.
 ///
-/// Uses config.command_name so duplicate detection works regardless of
-/// whether the user configured "wt" or "lazywt" as the command name.
-fn eval_pattern_for_shell(command_name: &str) -> String {
-    format!("{} init", command_name)
+/// Matches on the fixed binary invocation, so duplicate detection works
+/// regardless of which alias the user configured as command_name.
+fn eval_pattern_for_shell() -> &'static str {
+    "lazywt init"
 }
 
 /// Append the eval line to the user's shell profile file.
-fn run_add(shell: &alias::Shell, config: &Config) -> Result<()> {
+fn run_add(shell: &alias::Shell, _config: &Config) -> Result<()> {
     let profile = alias::profile_path(shell)?;
-    let eval_line = eval_line_for_shell(shell, &config.command_name);
-    let eval_pattern = eval_pattern_for_shell(&config.command_name);
+    let eval_line = eval_line_for_shell(shell);
+    let eval_pattern = eval_pattern_for_shell();
 
     // Check for existing eval line (skip if present)
     if profile.exists() {
         let content = std::fs::read_to_string(&profile)?;
-        if content.contains(&eval_pattern) {
+        if content.contains(eval_pattern) {
             output::warning(&format!(
                 "Shell integration already configured in {}",
                 display_path(&profile)
@@ -106,46 +107,44 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
-    fn eval_line_bash_uses_command_name() {
-        let line = eval_line_for_shell(&alias::Shell::Bash, "wt");
-        assert!(line.contains("wt init bash"), "eval line should use command_name 'wt'");
-        assert!(!line.contains("lazywt"), "eval line should NOT hardcode 'lazywt'");
-    }
-
-    #[test]
-    fn eval_line_zsh_uses_command_name() {
-        let line = eval_line_for_shell(&alias::Shell::Zsh, "wt");
-        assert!(line.contains("wt init zsh"), "eval line should use command_name 'wt'");
-    }
-
-    #[test]
-    fn eval_line_powershell_uses_command_name() {
-        let line = eval_line_for_shell(&alias::Shell::PowerShell, "wt");
+    fn eval_line_bash_invokes_binary() {
+        let line = eval_line_for_shell(&alias::Shell::Bash);
         assert!(
-            line.contains("wt init powershell"),
-            "eval line should use command_name 'wt'"
+            line.contains("lazywt init bash"),
+            "eval line must invoke the lazywt binary, got: {line}"
         );
     }
 
     #[test]
-    fn eval_line_nushell_uses_command_name() {
-        let line = eval_line_for_shell(&alias::Shell::Nushell, "wt");
+    fn eval_line_zsh_invokes_binary() {
+        let line = eval_line_for_shell(&alias::Shell::Zsh);
         assert!(
-            line.contains("wt init nushell"),
-            "eval line should use command_name 'wt'"
+            line.contains("lazywt init zsh"),
+            "eval line must invoke the lazywt binary, got: {line}"
         );
     }
 
     #[test]
-    fn eval_pattern_uses_command_name() {
-        let pattern = eval_pattern_for_shell("wt");
-        assert_eq!(pattern, "wt init");
+    fn eval_line_powershell_invokes_binary() {
+        let line = eval_line_for_shell(&alias::Shell::PowerShell);
+        assert!(
+            line.contains("& lazywt init powershell"),
+            "eval line must invoke the lazywt binary, got: {line}"
+        );
     }
 
     #[test]
-    fn eval_pattern_custom_name() {
-        let pattern = eval_pattern_for_shell("lazywt");
-        assert_eq!(pattern, "lazywt init");
+    fn eval_line_nushell_invokes_binary() {
+        let line = eval_line_for_shell(&alias::Shell::Nushell);
+        assert!(
+            line.contains("lazywt init nushell"),
+            "eval line must invoke the lazywt binary, got: {line}"
+        );
+    }
+
+    #[test]
+    fn eval_pattern_matches_binary_invocation() {
+        assert_eq!(eval_pattern_for_shell(), "lazywt init");
     }
 
     #[test]
@@ -156,13 +155,13 @@ mod tests {
 
         // We can't easily call run_add directly because it uses alias::profile_path,
         // but we can test the helper functions and verify the logic
-        let eval_line = eval_line_for_shell(&alias::Shell::Bash, "wt");
-        assert!(eval_line.contains("wt init bash"));
+        let eval_line = eval_line_for_shell(&alias::Shell::Bash);
+        assert!(eval_line.contains("lazywt init bash"));
 
         // Simulate what run_add does: check for duplicate, then append
         let content = std::fs::read_to_string(&path).unwrap();
-        let pattern = eval_pattern_for_shell("wt");
-        assert!(!content.contains(&pattern), "Should not find pattern yet");
+        let pattern = eval_pattern_for_shell();
+        assert!(!content.contains(pattern), "Should not find pattern yet");
 
         // Append
         let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
@@ -172,21 +171,21 @@ mod tests {
 
         // Verify it was appended
         let content = std::fs::read_to_string(&path).unwrap();
-        assert!(content.contains(&pattern), "Pattern should now be present");
+        assert!(content.contains(pattern), "Pattern should now be present");
     }
 
     #[test]
     fn run_add_skips_duplicate() {
         let mut file = NamedTempFile::new().unwrap();
-        let eval_line = eval_line_for_shell(&alias::Shell::Bash, "wt");
+        let eval_line = eval_line_for_shell(&alias::Shell::Bash);
         writeln!(file, "{}", eval_line).unwrap();
         let path = file.path().to_path_buf();
 
         // Check that duplicate detection works
         let content = std::fs::read_to_string(&path).unwrap();
-        let pattern = eval_pattern_for_shell("wt");
+        let pattern = eval_pattern_for_shell();
         assert!(
-            content.contains(&pattern),
+            content.contains(pattern),
             "Should detect existing eval line"
         );
     }
