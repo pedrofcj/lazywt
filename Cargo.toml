@@ -25,6 +25,14 @@ tempfile = "3"
 assert_cmd = "2"
 predicates = "3"
 
+[features]
+benchmarks = []
+
+[[bin]]
+name = "benchmark-list"
+path = "benchmarks/list_worker.rs"
+required-features = ["benchmarks"]
+
 [[bin]]
 name = "mock_gh"
 path = "tests/bins/mock_gh.rs"
